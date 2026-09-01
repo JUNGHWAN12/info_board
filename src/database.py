@@ -48,8 +48,21 @@ def update_assignment(assignment_id: str, title: str, description: str, due_at: 
     ).eq("id", assignment_id).execute()
 
 
-def list_apps(assignment_id: str | None = None) -> list[dict[str, Any]]:
-    query = client().table("apps").select("*, assignments(title, status, due_at)").order("created_at", desc=True)
+def list_apps(
+    assignment_id: str | None = None,
+    order_by: str = "created_at",
+    descending: bool = True,
+) -> list[dict[str, Any]]:
+    allowed_order_columns = {"created_at", "likes", "nickname"}
+    if order_by not in allowed_order_columns:
+        raise ValueError("Unsupported work sort order")
+    query = (
+        client()
+        .table("apps")
+        .select("*, assignments(title, status, due_at)")
+        .order(order_by, desc=descending)
+        .order("created_at", desc=True)
+    )
     if assignment_id:
         query = query.eq("assignment_id", assignment_id)
     return query.execute().data or []
@@ -101,6 +114,7 @@ def liked_app_ids(profile_id: str) -> set[str]:
     return {row["app_id"] for row in rows}
 
 
-def add_like(app_id: str, profile_id: str) -> bool:
-    result = client().rpc("add_app_like", {"p_app_id": app_id, "p_profile_id": profile_id}).execute()
+def toggle_like(app_id: str, profile_id: str) -> bool:
+    """Toggle the current user's like and return its new state."""
+    result = client().rpc("toggle_app_like", {"p_app_id": app_id, "p_profile_id": profile_id}).execute()
     return bool(result.data)

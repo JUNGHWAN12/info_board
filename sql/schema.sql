@@ -78,6 +78,27 @@ begin
 end;
 $$;
 
+create or replace function public.toggle_app_like(p_app_id uuid, p_profile_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  delete from app_likes
+  where app_id = p_app_id and profile_id = p_profile_id;
+
+  if found then
+    update apps set likes = greatest(likes - 1, 0) where id = p_app_id;
+    return false;
+  end if;
+
+  insert into app_likes (app_id, profile_id) values (p_app_id, p_profile_id);
+  update apps set likes = likes + 1 where id = p_app_id;
+  return true;
+end;
+$$;
+
 -- Streamlit 서버만 secret key로 DB에 접근한다. 공개 API 경로는 차단한다.
 alter table public.profiles enable row level security;
 alter table public.assignments enable row level security;
@@ -87,7 +108,9 @@ alter table public.app_likes enable row level security;
 revoke all on all tables in schema public from anon, authenticated;
 revoke all on all sequences in schema public from anon, authenticated;
 revoke execute on function public.add_app_like(uuid, uuid) from public, anon, authenticated;
+revoke execute on function public.toggle_app_like(uuid, uuid) from public, anon, authenticated;
 grant execute on function public.add_app_like(uuid, uuid) to service_role;
+grant execute on function public.toggle_app_like(uuid, uuid) to service_role;
 
 -- 교사 승격 예시: Google 로그인 후 한 번 실행
 -- update public.profiles set role = 'teacher' where email = 'teacher@school.example';

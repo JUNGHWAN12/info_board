@@ -15,7 +15,6 @@ from src.constants import (
 )
 from src.database import (
     add_feedback,
-    add_like,
     create_app,
     create_assignment,
     delete_app,
@@ -23,6 +22,7 @@ from src.database import (
     list_apps,
     list_assignments,
     list_feedback_by_app,
+    toggle_like,
     update_assignment,
 )
 from src.styles import inject_styles
@@ -33,6 +33,11 @@ st.set_page_config(page_title="정보 수업 작품 게시판", page_icon="🐥"
 inject_styles()
 
 GALLERY_REFRESH_SECONDS = 15
+WORK_SORT_OPTIONS = {
+    "최신 게시물순": ("created_at", True),
+    "좋아요 많은 순": ("likes", True),
+    "작성자 이름순": ("nickname", False),
+}
 
 
 def can_submit(assignment: dict) -> bool:
@@ -58,10 +63,13 @@ def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list
         st.caption(work["description"])
         left, right = st.columns(2)
         left.link_button("작품 열기", work["url"], use_container_width=True)
-        if right.button(f"♥ {work['likes']}", key=f"like-{work['id']}", disabled=work["id"] in liked, use_container_width=True):
-            if add_like(work["id"], profile["id"]):
-                st.rerun()
-            st.info("이미 좋아요를 눌렀습니다.")
+        liked_by_me = work["id"] in liked
+        like_label = f"♥ {work['likes']}" + (" · 취소" if liked_by_me else "")
+        if right.button(like_label, key=f"like-{work['id']}", type="primary" if liked_by_me else "secondary", use_container_width=True):
+            now_liked = toggle_like(work["id"], profile["id"])
+            message = "좋아요를 눌렀습니다." if now_liked else "좋아요를 취소했습니다."
+            st.session_state["flash_message"] = ("success", message)
+            st.rerun()
 
         if profile["role"] == "teacher":
             with st.expander("교사 관리"):
@@ -96,8 +104,11 @@ def gallery(profile: dict) -> None:
     st.caption(f"새 작품과 과제는 {GALLERY_REFRESH_SECONDS}초마다 자동으로 갱신됩니다.")
     assignments = list_assignments(include_inactive=True)
     options = {"전체": None} | {assignment_label(a): a["id"] for a in assignments if a["status"] != "draft"}
-    selected_label = st.selectbox("과제별 보기", options.keys(), label_visibility="collapsed")
-    apps = list_apps(options[selected_label])
+    filter_column, sort_column = st.columns([2, 1])
+    selected_label = filter_column.selectbox("과제별 보기", options.keys(), label_visibility="collapsed")
+    sort_label = sort_column.selectbox("정렬", WORK_SORT_OPTIONS.keys(), label_visibility="collapsed")
+    order_by, descending = WORK_SORT_OPTIONS[sort_label]
+    apps = list_apps(options[selected_label], order_by=order_by, descending=descending)
     liked = liked_app_ids(profile["id"])
     feedback_by_app = list_feedback_by_app([work["id"] for work in apps])
     st.caption(f"총 {len(apps)}개 작품")
