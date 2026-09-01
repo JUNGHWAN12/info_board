@@ -31,6 +31,8 @@ from src.validation import contains_banned_word, https_url
 st.set_page_config(page_title="정보 수업 작품 게시판", page_icon="🐥", layout="wide")
 inject_styles()
 
+GALLERY_REFRESH_SECONDS = 15
+
 
 def can_submit(assignment: dict) -> bool:
     if assignment["status"] != "open":
@@ -47,8 +49,10 @@ def assignment_label(assignment: dict) -> str:
     return f"{assignment['title']}{suffix}"
 
 
+@st.fragment(run_every=GALLERY_REFRESH_SECONDS)
 def gallery(profile: dict) -> None:
     st.subheader("학생들의 작품 갤러리")
+    st.caption(f"새 작품과 과제는 {GALLERY_REFRESH_SECONDS}초마다 자동으로 갱신됩니다.")
     assignments = list_assignments(include_inactive=True)
     options = {"전체": None} | {assignment_label(a): a["id"] for a in assignments if a["status"] != "draft"}
     selected_label = st.selectbox("과제별 보기", options.keys(), label_visibility="collapsed")
@@ -117,7 +121,8 @@ def submit_work(profile: dict) -> None:
                 st.error("마감된 과제입니다. 목록을 새로고침해 주세요.")
             else:
                 create_app(assignment["id"], nickname.strip(), url.strip(), description.strip(), profile["id"])
-                st.success("작품을 게시했습니다.")
+                st.session_state["flash_message"] = ("success", "작품을 게시했습니다. 갤러리에 바로 반영되었습니다.")
+                st.rerun()
 
 
 def teacher_dashboard() -> None:
@@ -134,7 +139,7 @@ def teacher_dashboard() -> None:
             else:
                 due_at = datetime.combine(due_date, time.max).astimezone().isoformat() if has_due else None
                 create_assignment(title.strip(), description.strip(), due_at, status)
-                st.success("과제를 만들었습니다.")
+                st.session_state["flash_message"] = ("success", "과제를 만들었습니다. 학생 갤러리에 자동 반영됩니다.")
                 st.rerun()
 
     st.divider()
@@ -151,7 +156,7 @@ def teacher_dashboard() -> None:
                 if st.form_submit_button("저장"):
                     due_at = datetime.combine(due_date, time.max).astimezone().isoformat() if has_due else None
                     update_assignment(assignment["id"], title.strip(), description.strip(), due_at, status)
-                    st.success("저장했습니다.")
+                    st.session_state["flash_message"] = ("success", "과제 설정을 저장했습니다. 학생 갤러리에 자동 반영됩니다.")
                     st.rerun()
 
 
@@ -167,6 +172,9 @@ def main() -> None:
     st.sidebar.success(f"{profile['display_name']}님")
     st.sidebar.caption(profile["email"])
     logout_button()
+    if flash := st.session_state.pop("flash_message", None):
+        level, message = flash
+        getattr(st, level)(message)
     tabs = st.tabs(["작품 갤러리", "내 작품 제출"] + (["과제 관리"] if profile["role"] == "teacher" else []))
     with tabs[0]:
         gallery(profile)
