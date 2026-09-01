@@ -18,10 +18,11 @@ from src.database import (
     add_like,
     create_app,
     create_assignment,
+    delete_app,
     liked_app_ids,
     list_apps,
     list_assignments,
-    list_feedback,
+    list_feedback_by_app,
     update_assignment,
 )
 from src.styles import inject_styles
@@ -49,7 +50,7 @@ def assignment_label(assignment: dict) -> str:
     return f"{assignment['title']}{suffix}"
 
 
-def render_work_card(work: dict, liked: set[str], profile: dict) -> None:
+def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list[dict]) -> None:
     assignment = work.get("assignments") or {}
     with st.container(border=True):
         st.markdown(f"<span class='badge'>{escape(assignment.get('title', '과제'))}</span>", unsafe_allow_html=True)
@@ -62,8 +63,15 @@ def render_work_card(work: dict, liked: set[str], profile: dict) -> None:
                 st.rerun()
             st.info("이미 좋아요를 눌렀습니다.")
 
+        if profile["role"] == "teacher":
+            with st.expander("교사 관리"):
+                confirmed = st.checkbox("이 게시물을 삭제합니다.", key=f"delete-confirm-{work['id']}")
+                if st.button("게시물 삭제", key=f"delete-{work['id']}", disabled=not confirmed, type="primary"):
+                    delete_app(work["id"])
+                    st.session_state["flash_message"] = ("success", "게시물을 삭제했습니다.")
+                    st.rerun()
+
         with st.expander("피드백 보기 및 작성"):
-            feedbacks = list_feedback(work["id"])
             if feedbacks:
                 for feedback in feedbacks:
                     st.write(f"**{feedback['nickname']}**  {feedback['content']}")
@@ -91,6 +99,7 @@ def gallery(profile: dict) -> None:
     selected_label = st.selectbox("과제별 보기", options.keys(), label_visibility="collapsed")
     apps = list_apps(options[selected_label])
     liked = liked_app_ids(profile["id"])
+    feedback_by_app = list_feedback_by_app([work["id"] for work in apps])
     st.caption(f"총 {len(apps)}개 작품")
 
     if not apps:
@@ -101,7 +110,7 @@ def gallery(profile: dict) -> None:
         columns = st.columns(3, gap="small")
         for column, work in zip(columns, apps[start:start + 3]):
             with column:
-                render_work_card(work, liked, profile)
+                render_work_card(work, liked, profile, feedback_by_app.get(work["id"], []))
 
 
 def submit_work(profile: dict) -> None:

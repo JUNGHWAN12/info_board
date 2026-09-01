@@ -61,8 +61,33 @@ def create_app(assignment_id: str, nickname: str, url: str, description: str, pr
     ).execute()
 
 
+def delete_app(app_id: str) -> None:
+    """Delete one work; its feedback and likes cascade in the database."""
+    client().table("apps").delete().eq("id", app_id).execute()
+
+
 def list_feedback(app_id: str) -> list[dict[str, Any]]:
     return client().table("feedback").select("*").eq("app_id", app_id).order("created_at").execute().data or []
+
+
+def list_feedback_by_app(app_ids: list[str]) -> dict[str, list[dict[str, Any]]]:
+    """Load feedback for every visible work in one query, not one query per card."""
+    if not app_ids:
+        return {}
+    rows = (
+        client()
+        .table("feedback")
+        .select("*")
+        .in_("app_id", app_ids)
+        .order("created_at")
+        .execute()
+        .data
+        or []
+    )
+    feedback_by_app: dict[str, list[dict[str, Any]]] = {app_id: [] for app_id in app_ids}
+    for row in rows:
+        feedback_by_app.setdefault(row["app_id"], []).append(row)
+    return feedback_by_app
 
 
 def add_feedback(app_id: str, nickname: str, content: str, profile_id: str) -> None:
