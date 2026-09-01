@@ -6,8 +6,13 @@ import streamlit as st
 from supabase import Client, create_client
 
 
-@st.cache_resource
 def client() -> Client:
+    """Create a short-lived client for each DB operation.
+
+    Community Cloud may keep an app process alive while the upstream HTTP
+    connection has already closed. Caching this client then causes intermittent
+    ``Broken pipe`` failures during gallery auto-refresh.
+    """
     return create_client(st.secrets["SUPABASE_URL"], st.secrets["SUPABASE_SERVICE_KEY"])
 
 

@@ -49,6 +49,39 @@ def assignment_label(assignment: dict) -> str:
     return f"{assignment['title']}{suffix}"
 
 
+def render_work_card(work: dict, liked: set[str], profile: dict) -> None:
+    assignment = work.get("assignments") or {}
+    with st.container(border=True):
+        st.markdown(f"<span class='badge'>{escape(assignment.get('title', '과제'))}</span>", unsafe_allow_html=True)
+        st.markdown(f"#### {escape(work['nickname'])}")
+        st.caption(work["description"])
+        left, right = st.columns(2)
+        left.link_button("작품 열기", work["url"], use_container_width=True)
+        if right.button(f"♥ {work['likes']}", key=f"like-{work['id']}", disabled=work["id"] in liked, use_container_width=True):
+            if add_like(work["id"], profile["id"]):
+                st.rerun()
+            st.info("이미 좋아요를 눌렀습니다.")
+
+        with st.expander("피드백 보기 및 작성"):
+            feedbacks = list_feedback(work["id"])
+            if feedbacks:
+                for feedback in feedbacks:
+                    st.write(f"**{feedback['nickname']}**  {feedback['content']}")
+            else:
+                st.caption("첫 피드백을 남겨 보세요.")
+            with st.form(f"feedback-{work['id']}", clear_on_submit=True):
+                nickname = st.text_input("닉네임", value=profile["display_name"], max_chars=MAX_FEEDBACK_NICKNAME_LENGTH)
+                content = st.text_input("피드백", max_chars=MAX_FEEDBACK_LENGTH)
+                if st.form_submit_button("피드백 등록"):
+                    if not nickname.strip() or not content.strip():
+                        st.error("닉네임과 피드백을 모두 입력해 주세요.")
+                    elif contains_banned_word(nickname, content):
+                        st.error("부적절한 표현이 포함되어 등록할 수 없습니다.")
+                    else:
+                        add_feedback(work["id"], nickname.strip(), content.strip(), profile["id"])
+                        st.rerun()
+
+
 @st.fragment(run_every=GALLERY_REFRESH_SECONDS)
 def gallery(profile: dict) -> None:
     st.subheader("학생들의 작품 갤러리")
@@ -64,37 +97,11 @@ def gallery(profile: dict) -> None:
         st.info("아직 등록된 작품이 없습니다.")
         return
 
-    for work in apps:
-        assignment = work.get("assignments") or {}
-        with st.container(border=True):
-            st.markdown(f"<span class='badge'>{escape(assignment.get('title', '과제'))}</span>", unsafe_allow_html=True)
-            st.markdown(f"#### {escape(work['nickname'])}")
-            st.write(work["description"])
-            left, right, _ = st.columns([1, 1, 4])
-            left.link_button("작품 열기", work["url"], use_container_width=True)
-            if right.button(f"♥ {work['likes']}", key=f"like-{work['id']}", disabled=work["id"] in liked, use_container_width=True):
-                if add_like(work["id"], profile["id"]):
-                    st.rerun()
-                st.info("이미 좋아요를 눌렀습니다.")
-
-            with st.expander("피드백 보기 및 작성"):
-                feedbacks = list_feedback(work["id"])
-                if feedbacks:
-                    for feedback in feedbacks:
-                        st.write(f"**{feedback['nickname']}**  {feedback['content']}")
-                else:
-                    st.caption("첫 피드백을 남겨 보세요.")
-                with st.form(f"feedback-{work['id']}", clear_on_submit=True):
-                    nickname = st.text_input("닉네임", value=profile["display_name"], max_chars=MAX_FEEDBACK_NICKNAME_LENGTH)
-                    content = st.text_input("피드백", max_chars=MAX_FEEDBACK_LENGTH)
-                    if st.form_submit_button("피드백 등록"):
-                        if not nickname.strip() or not content.strip():
-                            st.error("닉네임과 피드백을 모두 입력해 주세요.")
-                        elif contains_banned_word(nickname, content):
-                            st.error("부적절한 표현이 포함되어 등록할 수 없습니다.")
-                        else:
-                            add_feedback(work["id"], nickname.strip(), content.strip(), profile["id"])
-                            st.rerun()
+    for start in range(0, len(apps), 3):
+        columns = st.columns(3, gap="small")
+        for column, work in zip(columns, apps[start:start + 3]):
+            with column:
+                render_work_card(work, liked, profile)
 
 
 def submit_work(profile: dict) -> None:
