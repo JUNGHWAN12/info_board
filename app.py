@@ -67,13 +67,14 @@ def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list
         like_label = f"♥ {work['likes']}" + (" · 취소" if liked_by_me else "")
         if right.button(like_label, key=f"like-{work['id']}", type="primary" if liked_by_me else "secondary", use_container_width=True):
             try:
-                now_liked = toggle_like(work["id"], profile["id"])
+                toggle_like(work["id"], profile["id"])
             except Exception:
                 st.error("좋아요 설정을 불러오지 못했습니다. Supabase SQL Editor에서 `sql/migrations/002_toggle_like.sql`을 실행한 뒤 다시 시도해 주세요.")
                 return
-            message = "좋아요를 눌렀습니다." if now_liked else "좋아요를 취소했습니다."
-            st.session_state["flash_message"] = ("success", message)
-            st.rerun()
+            # This function is rendered inside the gallery fragment. Refreshing
+            # only that fragment avoids reloading the auth, submit, and teacher
+            # screens after every like.
+            st.rerun(scope="fragment")
 
         if profile["role"] == "teacher":
             with st.expander("교사 관리"):
@@ -83,7 +84,14 @@ def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list
                     st.session_state["flash_message"] = ("success", "게시물을 삭제했습니다.")
                     st.rerun()
 
-        with st.expander("피드백 보기 및 작성"):
+        feedback_state_key = "open_feedback_app_id"
+        feedback_is_open = st.session_state.get(feedback_state_key) == work["id"]
+        feedback_button_label = f"피드백 {len(feedbacks)}개" + (" 닫기" if feedback_is_open else " 보기")
+        if st.button(feedback_button_label, key=f"feedback-toggle-{work['id']}", use_container_width=True):
+            st.session_state[feedback_state_key] = None if feedback_is_open else work["id"]
+            st.rerun(scope="fragment")
+
+        if feedback_is_open:
             if feedbacks:
                 for feedback in feedbacks:
                     st.write(f"**{feedback['nickname']}**  {feedback['content']}")
@@ -99,7 +107,7 @@ def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list
                         st.error("부적절한 표현이 포함되어 등록할 수 없습니다.")
                     else:
                         add_feedback(work["id"], nickname.strip(), content.strip(), profile["id"])
-                        st.rerun()
+                        st.rerun(scope="fragment")
 
 
 @st.fragment(run_every=GALLERY_REFRESH_SECONDS)
