@@ -66,7 +66,11 @@ def render_work_card(work: dict, liked: set[str], profile: dict, feedbacks: list
         liked_by_me = work["id"] in liked
         like_label = f"♥ {work['likes']}" + (" · 취소" if liked_by_me else "")
         if right.button(like_label, key=f"like-{work['id']}", type="primary" if liked_by_me else "secondary", use_container_width=True):
-            now_liked = toggle_like(work["id"], profile["id"])
+            try:
+                now_liked = toggle_like(work["id"], profile["id"])
+            except Exception:
+                st.error("좋아요 설정을 불러오지 못했습니다. Supabase SQL Editor에서 `sql/migrations/002_toggle_like.sql`을 실행한 뒤 다시 시도해 주세요.")
+                return
             message = "좋아요를 눌렀습니다." if now_liked else "좋아요를 취소했습니다."
             st.session_state["flash_message"] = ("success", message)
             st.rerun()
